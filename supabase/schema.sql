@@ -44,6 +44,7 @@ on conflict (slug) do nothing;
 -- by anyone except the SECURITY DEFINER functions below.
 alter table shops enable row level security;
 
+drop policy if exists "public can read active shops" on shops;
 create policy "public can read active shops"
   on shops for select
   to anon
@@ -104,11 +105,13 @@ on conflict (id) do nothing;
 -- bypasses RLS entirely, so this only restricts the public/anon client.
 alter table orders enable row level security;
 
+drop policy if exists "anyone can insert an order" on orders;
 create policy "anyone can insert an order"
   on orders for insert
   to anon
   with check (true);
 
+drop policy if exists "anyone can read their own order by id" on orders;
 create policy "anyone can read their own order by id"
   on orders for select
   to anon

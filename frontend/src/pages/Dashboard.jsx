@@ -11,7 +11,7 @@ export default function Dashboard() {
   const [orders, setOrders] = useState([]);
 
   useEffect(() => {
-    supabase.from("shops").select("*").eq("slug", shopSlug).single().then(({ data }) => setShop(data));
+    supabase.from("shops").select("id, name, slug, upi_vpa, upi_payee_name, price_bw_per_page, price_color_per_page, is_active").eq("slug", shopSlug).single().then(({ data }) => setShop(data));
   }, [shopSlug]);
 
   useEffect(() => {

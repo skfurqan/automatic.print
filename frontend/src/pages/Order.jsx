@@ -17,12 +17,14 @@ export default function Order() {
   useEffect(() => {
     supabase
       .from("shops")
-      .select("*")
+      .select("id, name, slug, upi_vpa, upi_payee_name, price_bw_per_page, price_color_per_page, is_active")
       .eq("slug", shopSlug)
       .single()
       .then(({ data, error }) => {
-        if (error) setError("Shop not found.");
-        else setShop(data);
+        if (error) {
+          console.error("Shop fetch failed:", error);
+          setError(`Shop not found (${error.message}).`);
+        } else setShop(data);
       });
   }, [shopSlug]);
 

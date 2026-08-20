@@ -22,12 +22,21 @@ create table if not exists shops (
   price_bw_per_page numeric(6,2) not null default 1.50,
   price_color_per_page numeric(6,2) not null default 5.00,
   is_active boolean not null default true,
+
+  -- Option A (shop-owner one-tap confirm): a short PIN the shop owner
+  -- enters on the dashboard to confirm they've seen the UPI payment land.
+  -- Not bank-grade security — appropriate for a single-shop MVP where
+  -- the PIN is only ever entered by the person standing at the counter.
+  dashboard_pin text not null,
+
   created_at timestamptz not null default now()
 );
 
--- Your real shop row (using your actual UPI ID). Edit name/slug as you like.
-insert into shops (name, slug, upi_vpa, upi_payee_name, price_bw_per_page, price_color_per_page)
-values ('Test Kiosk', 'test-kiosk', '7416952126@ybl', 'Shaik Furkhan', 1.50, 5.00)
+-- Your real shop row (using your actual UPI ID). Change the PIN below
+-- before going live — this is a real value, not a placeholder, just
+-- pick your own 4-6 digit PIN and re-run this line.
+insert into shops (name, slug, upi_vpa, upi_payee_name, price_bw_per_page, price_color_per_page, dashboard_pin)
+values ('Test Kiosk', 'test-kiosk', '7416952126@ybl', 'Shaik Furkhan', 1.50, 5.00, '2468')
 on conflict (slug) do nothing;
 
 -- ============================================================
@@ -87,6 +96,51 @@ create policy "anyone can read their own order by id"
   on orders for select
   to anon
   using (true);  -- order id is a UUID, effectively unguessable — acceptable for this use case
+
+-- ============================================================
+-- 4b. ORDER STATE FUNCTIONS (Option A: shop-owner one-tap confirm)
+-- ============================================================
+
+-- Customer taps "I've Paid" after sending UPI money.
+create or replace function customer_marks_paid(p_order_id uuid)
+returns void
+language sql
+security definer
+as $$
+  update orders
+  set status = 'awaiting_confirmation'
+  where id = p_order_id and status = 'pending_payment';
+$$;
+
+-- Shop owner taps "Confirm" on the dashboard after checking their UPI app.
+-- Requires the shop's PIN so a customer can't confirm their own order.
+create or replace function shop_confirms_payment(p_order_id uuid, p_pin text)
+returns boolean
+language plpgsql
+security definer
+as $$
+declare
+  v_shop_id uuid;
+  v_correct_pin text;
+begin
+  select shop_id into v_shop_id from orders where id = p_order_id;
+  select dashboard_pin into v_correct_pin from shops where id = v_shop_id;
+
+  if v_correct_pin is distinct from p_pin then
+    return false;
+  end if;
+
+  update orders
+  set status = 'queued', paid_at = now()
+  where id = p_order_id and status = 'awaiting_confirmation';
+
+  return true;
+end;
+$$;
+
+-- Expose these two functions to the anon (public) role via RPC.
+grant execute on function customer_marks_paid(uuid) to anon;
+grant execute on function shop_confirms_payment(uuid, text) to anon;
 
 -- ============================================================
 -- 5. AUTO-CLEANUP (this is the "no manual storage management" part)

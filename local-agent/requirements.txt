@@ -1,0 +1,3 @@
+supabase==2.*
+requests
+pywin32; platform_system == "Windows"

@@ -39,6 +39,23 @@ insert into shops (name, slug, upi_vpa, upi_payee_name, price_bw_per_page, price
 values ('Test Kiosk', 'test-kiosk', '7416952126@ybl', 'Shaik Furkhan', 1.50, 5.00, '2468')
 on conflict (slug) do nothing;
 
+-- Row Level Security: the frontend reads shop info (name, price, UPI id)
+-- with the public anon key, but dashboard_pin must never be readable
+-- by anyone except the SECURITY DEFINER functions below.
+alter table shops enable row level security;
+
+create policy "public can read active shops"
+  on shops for select
+  to anon
+  using (is_active = true);
+
+-- Column-level lock: even though the row-level policy above allows
+-- reading active shop rows, this explicitly removes dashboard_pin from
+-- what the anon key is able to select at all — belt and suspenders.
+revoke select on shops from anon;
+grant select (id, name, slug, upi_vpa, upi_payee_name, price_bw_per_page, price_color_per_page, is_active, created_at)
+  on shops to anon;
+
 -- ============================================================
 -- 3. ORDERS TABLE
 -- ============================================================

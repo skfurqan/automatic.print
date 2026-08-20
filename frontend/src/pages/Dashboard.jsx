@@ -11,7 +11,12 @@ export default function Dashboard() {
   const [orders, setOrders] = useState([]);
 
   useEffect(() => {
-    supabase.from("shops").select("id, name, slug, upi_vpa, upi_payee_name, price_bw_per_page, price_color_per_page, is_active").eq("slug", shopSlug).single().then(({ data }) => setShop(data));
+    supabase
+      .from("shops")
+      .select("id, name, slug, upi_vpa, upi_payee_name, price_bw_per_page, price_color_per_page, is_active")
+      .eq("slug", shopSlug)
+      .single()
+      .then(({ data }) => setShop(data));
   }, [shopSlug]);
 
   useEffect(() => {
@@ -31,19 +36,8 @@ export default function Dashboard() {
     setOrders(data || []);
   }
 
-  function tryUnlock() {
-    // The PIN itself is verified server-side inside shop_confirms_payment —
-    // this local check is just to gate the dashboard UI. Real enforcement
-    // happens on every confirm action below.
-    setUnlocked(true);
-    setPinError("");
-  }
-
   async function confirmOrder(orderId) {
-    const { data, error } = await supabase.rpc("shop_confirms_payment", {
-      p_order_id: orderId,
-      p_pin: pin,
-    });
+    const { data, error } = await supabase.rpc("shop_confirms_payment", { p_order_id: orderId, p_pin: pin });
     if (error || data === false) {
       setPinError("Wrong PIN — payment not confirmed.");
       setUnlocked(false);
@@ -52,49 +46,67 @@ export default function Dashboard() {
     loadOrders();
   }
 
-  if (!shop) return <div className="p-6">Loading...</div>;
+  if (!shop) return <div className="page"><div className="card loading">Loading...</div></div>;
 
   if (!unlocked) {
     return (
-      <div className="max-w-sm mx-auto p-6 space-y-4">
-        <h1 className="text-xl font-bold">{shop.name} — Dashboard</h1>
-        <input
-          type="password"
-          placeholder="Enter shop PIN"
-          value={pin}
-          onChange={(e) => setPin(e.target.value)}
-          className="border rounded p-2 w-full"
-        />
-        {pinError && <p className="text-red-600 text-sm">{pinError}</p>}
-        <button onClick={tryUnlock} className="w-full bg-blue-600 text-white rounded py-2">
-          Unlock
-        </button>
+      <div className="page">
+        <div className="card">
+          <div className="brand">
+            <div className="brand-icon">🔒</div>
+            <div>
+              <h1>{shop.name}</h1>
+              <p>Dashboard — PIN required</p>
+            </div>
+          </div>
+          <input
+            type="password"
+            inputMode="numeric"
+            placeholder="Enter PIN"
+            value={pin}
+            onChange={(e) => setPin(e.target.value)}
+            className="pin-input"
+          />
+          {pinError && <p className="error-text">{pinError}</p>}
+          <button className="btn btn-primary" onClick={() => { setUnlocked(true); setPinError(""); }}>
+            Unlock
+          </button>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-lg mx-auto p-6 space-y-4">
-      <h1 className="text-xl font-bold">{shop.name} — Orders</h1>
-      {orders.length === 0 && <p className="text-gray-500">No pending orders.</p>}
-      {orders.map((o) => (
-        <div key={o.id} className="border rounded p-4 flex justify-between items-center">
+    <div className="page">
+      <div className="card" style={{ maxWidth: 520 }}>
+        <div className="brand">
+          <div className="brand-icon">📋</div>
           <div>
-            <p className="font-medium">#{o.order_number} — ₹{o.amount}</p>
-            <p className="text-sm text-gray-600">
-              {o.page_count} page(s), {o.color_mode}, {o.copies} copies — {o.status}
-            </p>
+            <h1>{shop.name}</h1>
+            <p>Live orders</p>
           </div>
-          {o.status === "awaiting_confirmation" && (
-            <button
-              onClick={() => confirmOrder(o.id)}
-              className="bg-green-600 text-white rounded px-4 py-2 text-sm"
-            >
-              Confirm Payment
-            </button>
-          )}
         </div>
-      ))}
+
+        {orders.length === 0 && <div className="empty-state">No pending orders right now.</div>}
+
+        {orders.map((o) => (
+          <div key={o.id} className="order-list-item">
+            <div>
+              <div style={{ fontWeight: 600 }}>Order #{o.order_number} — ₹{o.amount}</div>
+              <div className="meta">{o.page_count} page(s), {o.color_mode}, {o.copies}x copies — {o.status}</div>
+            </div>
+            {o.status === "awaiting_confirmation" && (
+              <button
+                className="btn btn-primary"
+                style={{ width: "auto", padding: "10px 16px", fontSize: 13 }}
+                onClick={() => confirmOrder(o.id)}
+              >
+                Confirm
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

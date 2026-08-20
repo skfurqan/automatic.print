@@ -100,6 +100,22 @@ insert into storage.buckets (id, name, public)
 values ('print-uploads', 'print-uploads', false)
 on conflict (id) do nothing;
 
+-- Storage has its OWN RLS system, separate from table RLS above.
+-- Without this, no one (not even with the right table policies) can
+-- actually upload a file — this was the missing piece.
+drop policy if exists "anyone can upload print files" on storage.objects;
+create policy "anyone can upload print files"
+  on storage.objects for insert
+  to anon
+  with check (bucket_id = 'print-uploads');
+
+drop policy if exists "anyone can overwrite their own upload" on storage.objects;
+create policy "anyone can overwrite their own upload"
+  on storage.objects for update
+  to anon
+  using (bucket_id = 'print-uploads')
+  with check (bucket_id = 'print-uploads');
+
 -- Row Level Security: customers can upload but not read others' files.
 -- The local agent + edge functions use the service_role key, which
 -- bypasses RLS entirely, so this only restricts the public/anon client.

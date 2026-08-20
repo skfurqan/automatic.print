@@ -30,6 +30,7 @@ export default function Order() {
 
   function handleFileChange(e) {
     setFiles(Array.from(e.target.files));
+    setError("");
   }
 
   async function createOrder() {
@@ -52,13 +53,7 @@ export default function Order() {
         filePaths.push(path);
       }
 
-      const amount = calcPrice({
-        pageCount: files.length,
-        colorMode,
-        duplex,
-        copies,
-        shop,
-      });
+      const amount = calcPrice({ pageCount: files.length, colorMode, duplex, copies, shop });
 
       const { data, error: insertErr } = await supabase
         .from("orders")
@@ -100,75 +95,87 @@ export default function Order() {
     }, 3000);
   }
 
-  if (error && !shop) return <div className="p-6 text-red-600">{error}</div>;
-  if (!shop) return <div className="p-6">Loading...</div>;
-
-  if (order) {
-    return <OrderStatus order={order} shop={shop} onMarkPaid={markPaid} />;
+  if (error && !shop) {
+    return (
+      <div className="page">
+        <div className="card"><p className="error-text">{error}</p></div>
+      </div>
+    );
   }
+  if (!shop) return <div className="page"><div className="card loading">Loading...</div></div>;
 
-  const amount = files.length
-    ? calcPrice({ pageCount: files.length, colorMode, duplex, copies, shop })
-    : 0;
+  if (order) return <OrderStatus order={order} shop={shop} onMarkPaid={markPaid} />;
+
+  const amount = files.length ? calcPrice({ pageCount: files.length, colorMode, duplex, copies, shop }) : 0;
 
   return (
-    <div className="max-w-md mx-auto p-6 space-y-5">
-      <h1 className="text-2xl font-bold">{shop.name}</h1>
+    <div className="page">
+      <div className="card">
+        <div className="brand">
+          <div className="brand-icon">🖨️</div>
+          <div>
+            <h1>{shop.name}</h1>
+            <p>Scan, upload, print — no counter queue</p>
+          </div>
+        </div>
 
-      <div>
-        <label className="block font-medium mb-1">Upload your file(s)</label>
-        <input
-          type="file"
-          multiple
-          accept="image/*,.pdf"
-          onChange={handleFileChange}
-          className="block w-full border rounded p-2"
-        />
-        {files.length > 0 && (
-          <p className="text-sm text-gray-600 mt-1">{files.length} file(s) selected</p>
+        <div className="field">
+          <label>Upload your file(s)</label>
+          <label className="upload-box">
+            <input type="file" multiple accept="image/*,.pdf" onChange={handleFileChange} />
+            <div>{files.length ? "Change files" : "Tap to choose files"}</div>
+            <div className="upload-hint">Images or PDF, multiple allowed</div>
+          </label>
+          {files.length > 0 && <p className="file-count">{files.length} file(s) selected</p>}
+        </div>
+
+        {files.length === 2 && (
+          <label className="checkbox-row">
+            <input type="checkbox" checked={duplex} onChange={(e) => setDuplex(e.target.checked)} />
+            Treat these as Front & Back of the same document
+          </label>
         )}
+
+        <div className="field">
+          <label>Color mode</label>
+          <div className="option-grid">
+            <div
+              className={`option-card ${colorMode === "bw" ? "selected" : ""}`}
+              onClick={() => setColorMode("bw")}
+            >
+              Black &amp; White
+              <span className="price">₹{shop.price_bw_per_page}/page</span>
+            </div>
+            <div
+              className={`option-card ${colorMode === "color" ? "selected" : ""}`}
+              onClick={() => setColorMode("color")}
+            >
+              Color
+              <span className="price">₹{shop.price_color_per_page}/page</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="field">
+          <label>Copies</label>
+          <div className="stepper">
+            <button onClick={() => setCopies((c) => Math.max(1, c - 1))}>−</button>
+            <input type="text" readOnly value={copies} />
+            <button onClick={() => setCopies((c) => c + 1)}>+</button>
+          </div>
+        </div>
+
+        <div className="total-row">
+          <span className="total-label">Total</span>
+          <span className="total-amount">₹{amount.toFixed(2)}</span>
+        </div>
+
+        {error && <p className="error-text">{error}</p>}
+
+        <button className="btn btn-primary" onClick={createOrder} disabled={uploading || !files.length}>
+          {uploading ? "Uploading..." : "Continue to Pay"}
+        </button>
       </div>
-
-      {files.length === 2 && (
-        <label className="flex items-center gap-2">
-          <input type="checkbox" checked={duplex} onChange={(e) => setDuplex(e.target.checked)} />
-          Treat these as Front & Back of the same document
-        </label>
-      )}
-
-      <div className="flex gap-4">
-        <label className="flex items-center gap-2">
-          <input type="radio" checked={colorMode === "bw"} onChange={() => setColorMode("bw")} />
-          Black & White (₹{shop.price_bw_per_page}/page)
-        </label>
-        <label className="flex items-center gap-2">
-          <input type="radio" checked={colorMode === "color"} onChange={() => setColorMode("color")} />
-          Color (₹{shop.price_color_per_page}/page)
-        </label>
-      </div>
-
-      <div>
-        <label className="block font-medium mb-1">Copies</label>
-        <input
-          type="number"
-          min={1}
-          value={copies}
-          onChange={(e) => setCopies(Math.max(1, parseInt(e.target.value) || 1))}
-          className="border rounded p-2 w-20"
-        />
-      </div>
-
-      <div className="text-xl font-semibold">Total: ₹{amount.toFixed(2)}</div>
-
-      {error && <p className="text-red-600">{error}</p>}
-
-      <button
-        onClick={createOrder}
-        disabled={uploading || !files.length}
-        className="w-full bg-blue-600 text-white rounded py-3 font-medium disabled:opacity-50"
-      >
-        {uploading ? "Uploading..." : "Continue to Pay"}
-      </button>
     </div>
   );
 }
@@ -179,34 +186,30 @@ function OrderStatus({ order, shop, onMarkPaid }) {
   const statusMessages = {
     pending_payment: "Pay to complete your order",
     awaiting_confirmation: "Waiting for the shop to confirm your payment...",
-    queued: "Payment confirmed! Your print is in the queue.",
+    queued: "Payment confirmed — your print is in the queue.",
     printing: "Printing now...",
     completed: "Done! Collect your printout at the counter.",
   };
 
   return (
-    <div className="max-w-md mx-auto p-6 space-y-5 text-center">
-      <h2 className="text-xl font-bold">Order #{order.order_number}</h2>
-      <p className="text-3xl font-bold">₹{order.amount}</p>
+    <div className="page">
+      <div className="card status-card">
+        <div className="order-number">Order #{order.order_number}</div>
+        <div className="status-amount">₹{order.amount}</div>
 
-      {order.status === "pending_payment" && (
-        <>
-          <a
-            href={upiLink}
-            className="block w-full bg-green-600 text-white rounded py-3 font-medium"
-          >
-            Pay with UPI
-          </a>
-          <button
-            onClick={onMarkPaid}
-            className="w-full border border-gray-400 rounded py-3 font-medium"
-          >
-            I've Paid
-          </button>
-        </>
-      )}
+        {order.status === "pending_payment" && (
+          <>
+            <a href={upiLink} className="btn btn-success" style={{ display: "block", textDecoration: "none", lineHeight: "1.6" }}>
+              Pay with UPI
+            </a>
+            <button className="btn btn-outline" onClick={onMarkPaid}>I've Paid</button>
+          </>
+        )}
 
-      <p className="text-gray-700">{statusMessages[order.status] || order.status}</p>
+        <div className={`status-badge ${order.status === "completed" ? "done" : ""}`}>
+          {statusMessages[order.status] || order.status}
+        </div>
+      </div>
     </div>
   );
 }
